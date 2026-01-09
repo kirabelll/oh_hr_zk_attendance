@@ -21,18 +21,17 @@
 #
 ###############################################################################
 import pytz
-import datetime
+from datetime import datetime
 import logging
 
 from .zkconst import *
 from struct import unpack
-from odoo import api, fields, models
-from odoo import _
+from odoo import api, fields, models, _
 from odoo.exceptions import UserError, ValidationError
 
 _logger = logging.getLogger(__name__)
 try:
-    from zk import ZK, const
+    from pyzk import ZK, const
 except ImportError:
     _logger.error("Please Install pyzk library.")
 
@@ -47,19 +46,94 @@ class HrAttendance(models.Model):
 
 class ZkMachine(models.Model):
     _name = 'zk.machine'
+    _description = 'Biometric Device Configuration'
+    _rec_name = 'name'
 
-    name = fields.Char(string='Machine IP', required=True)
-    port_no = fields.Integer(string='Port No', required=True)
-    address_id = fields.Many2one('res.partner', string='Working Address')
-    company_id = fields.Many2one('res.company', string='Company', default=lambda
-        self: self.env.user.company_id.id)
+    name = fields.Char(string='Machine IP', required=True, help="IP address of the biometric device")
+    port_no = fields.Integer(string='Port No', required=True, default=4370, help="Port number of the biometric device")
+    address_id = fields.Many2one('res.partner', string='Working Address', help="Address where the device is located")
+    company_id = fields.Many2one('res.company', string='Company', 
+                                default=lambda self: self.env.company,
+                                help="Company that owns this device")
+    device_model = fields.Selection([
+        ('uface202', 'uFace 202'),
+        ('iface990', 'iFace 990'),
+        ('u280', 'U280'),
+        ('other', 'Other ZKTeco Model')
+    ], string='Device Model', default='u280', help="Select the ZKTeco device model")
+    
+    timeout = fields.Integer(string='Connection Timeout', default=30, 
+                           help="Connection timeout in seconds for device communication")
+    
+    last_sync_time = fields.Datetime(string='Last Sync Time', readonly=True,
+                                   help="Last time attendance data was synchronized")
+    
+    device_status = fields.Selection([
+        ('connected', 'Connected'),
+        ('disconnected', 'Disconnected'),
+        ('error', 'Connection Error')
+    ], string='Device Status', default='disconnected', readonly=True)
 
     def device_connect(self, zk):
+        """Connect to the biometric device with enhanced error handling for U280"""
         try:
             conn = zk.connect()
-            return conn
-        except:
+            if conn:
+                self.device_status = 'connected'
+                _logger.info(f"Successfully connected to {self.device_model} device at {self.name}:{self.port_no}")
+                return conn
+            else:
+                self.device_status = 'disconnected'
+                return False
+        except Exception as e:
+            self.device_status = 'error'
+            _logger.error(f"Failed to connect to {self.device_model} device at {self.name}:{self.port_no}. Error: {str(e)}")
             return False
+
+    def test_connection(self):
+        """Test connection to the biometric device"""
+        try:
+            zk = ZK(self.name, port=self.port_no, timeout=self.timeout, 
+                   password=0, force_udp=False, ommit_ping=False)
+            conn = self.device_connect(zk)
+            if conn:
+                # Get device info for U280
+                try:
+                    device_name = conn.get_device_name()
+                    firmware_version = conn.get_firmware_version()
+                    conn.disconnect()
+                    
+                    message = f"Connection successful!\n"
+                    message += f"Device: {device_name}\n"
+                    message += f"Firmware: {firmware_version}\n"
+                    message += f"Model: {self.device_model}"
+                    
+                    return {
+                        'type': 'ir.actions.client',
+                        'tag': 'display_notification',
+                        'params': {
+                            'title': 'Connection Test',
+                            'message': message,
+                            'type': 'success',
+                            'sticky': False,
+                        }
+                    }
+                except:
+                    conn.disconnect()
+                    return {
+                        'type': 'ir.actions.client',
+                        'tag': 'display_notification',
+                        'params': {
+                            'title': 'Connection Test',
+                            'message': 'Connection successful but could not retrieve device info.',
+                            'type': 'success',
+                            'sticky': False,
+                        }
+                    }
+            else:
+                raise UserError(_('Unable to connect to the device. Please check IP address, port, and network connectivity.'))
+        except Exception as error:
+            raise UserError(f'Connection failed: {str(error)}')
 
     def clear_attendance(self):
         """Methode to clear record from the zk.machine.attendance model and
@@ -139,7 +213,7 @@ class ZkMachine(models.Model):
 
     def download_attendance(self):
         """
-         download_attendance method: Download attendance data from a ZKTeco machine.
+         download_attendance method: Download attendance data from a ZKTeco machine including U280.
 
          This method connects to a ZKTeco machine specified by the 'name', 'port_no', and other parameters,
          retrieves attendance data, and creates corresponding records in 'zk.machine.attendance' and 'hr.attendance'.
@@ -150,13 +224,13 @@ class ZkMachine(models.Model):
          Returns:
              bool: True if the download is successful, raises exceptions otherwise.
          """
-        _logger.info("++++++++++++Cron Executed++++++++++++++++++++++")
+        _logger.info(f"++++++++++++Cron Executed for {self.device_model} device++++++++++++++++++++++")
         zk_attendance = self.env['zk.machine.attendance']
         att_obj = self.env['hr.attendance']
         for info in self:
             machine_ip = info.name
             zk_port = info.port_no
-            timeout = 15
+            timeout = info.timeout or 30
             try:
                 zk = ZK(machine_ip, port=zk_port, timeout=timeout, password=0,
                         force_udp=False, ommit_ping=False)
@@ -168,11 +242,15 @@ class ZkMachine(models.Model):
                 # conn.disable_device() #Device Cannot be used during this time.
                 try:
                     user = conn.get_users()
-                except:
+                    _logger.info(f"Retrieved {len(user) if user else 0} users from {info.device_model}")
+                except Exception as e:
+                    _logger.warning(f"Could not retrieve users from {info.device_model}: {str(e)}")
                     user = False
                 try:
                     attendance = conn.get_attendance()
-                except:
+                    _logger.info(f"Retrieved {len(attendance) if attendance else 0} attendance records from {info.device_model}")
+                except Exception as e:
+                    _logger.warning(f"Could not retrieve attendance from {info.device_model}: {str(e)}")
                     attendance = False
                 if attendance:
                     for each in attendance:
@@ -254,6 +332,8 @@ class ZkMachine(models.Model):
                                              'check_in': atten_time})
                                 else:
                                     pass
+                    # Update last sync time
+                    info.last_sync_time = fields.Datetime.now()
                     # zk.enableDevice()
                     conn.disconnect
                     return True

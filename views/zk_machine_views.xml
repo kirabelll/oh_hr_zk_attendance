@@ -8,6 +8,9 @@
         <field name="arch" type="xml">
             <form string="Biometric Device">
                 <header>
+                    <button name="test_connection" type="object"
+                            string="Test Connection" class="oe_highlight"
+                            icon="fa-plug"/>
                     <button name="clear_attendance" type="object"
                             string="Clear Data" class="oe_highlight"
                             icon="fa-remove "
@@ -20,6 +23,10 @@
                             string="Restart Device" class="oe_highlight"
                             icon="fa-refresh "
                             confirm="Are you sure you want to do this?"/>
+                    <field name="device_status" widget="badge" 
+                           decoration-success="device_status == 'connected'"
+                           decoration-danger="device_status == 'disconnected'"
+                           decoration-warning="device_status == 'error'"/>
                 </header>
                 <sheet>
                     <div class="oe_title">
@@ -30,12 +37,15 @@
                     </div>
                     <group>
                         <group>
+                            <field name="device_model"/>
                             <field name="port_no"/>
+                            <field name="timeout"/>
                             <field name="address_id"/>
                         </group>
                         <group>
                             <field name="company_id"
                                    groups="base.group_multi_company"/>
+                            <field name="last_sync_time" readonly="1"/>
                         </group>
                     </group>
                 </sheet>
@@ -49,8 +59,14 @@
         <field name="arch" type="xml">
             <tree string="Biometric Machine">
                 <field name="name"/>
+                <field name="device_model"/>
                 <field name="port_no"/>
+                <field name="device_status" widget="badge" 
+                       decoration-success="device_status == 'connected'"
+                       decoration-danger="device_status == 'disconnected'"
+                       decoration-warning="device_status == 'error'"/>
                 <field name="address_id"/>
+                <field name="last_sync_time"/>
                 <field name="company_id" groups="base.group_multi_company"/>
             </tree>
         </field>

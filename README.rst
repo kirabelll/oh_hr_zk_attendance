@@ -4,7 +4,7 @@
 
 Biometric Device Integration
 ============================
-This Cybrosys's module integrates Odoo attendance with biometric device attendance.
+This Cybrosys's module integrates Odoo 18 attendance with biometric device attendance.
 
 Configuration
 =============
@@ -22,13 +22,24 @@ Technical Notes
 ===============
  Used Libraries:
 
-* This integration is only applicable for the the device ZKteco model 'uFace 202' & 'iFace990'
+* This integration is applicable for ZKteco devices including 'uFace 202', 'iFace990', and 'U280'
 
-* zklib you can install zklib library using "sudo pip install zklib"
+* pyzk you can install pyzk library using "pip install pyzk"
 
  Compatible Devices
 
-* ZKteco model 'uFace 202' & 'iFace990'
+* ZKteco model 'uFace 202', 'iFace990', and 'U280'
+
+Installation
+============
+1. Install the required Python library:
+   pip install pyzk
+
+2. Copy this module to your Odoo addons directory
+
+3. Update the apps list and install the module
+
+4. Configure your biometric devices in HR > Configuration > Biometric Devices
 
 
 Company

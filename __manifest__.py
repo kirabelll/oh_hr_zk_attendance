@@ -25,7 +25,7 @@
     'version': '18.0.1.0.0',
     'category': 'Human Resources',
     'summary': 'Integrating Biometric Device With HR Attendance (Face + Thumb)',
-    'description': 'This module integrates Odoo with the biometric device(Model: ZKteco uFace 202)',
+    'description': 'This module integrates Odoo with biometric devices (Models: ZKteco uFace 202, iFace990, U280)',
     'author': 'Cybrosys Techno solutions',
     'maintainer': 'Cybrosys Techno Solutions',
     'company': 'Cybrosys Techno Solutions',
